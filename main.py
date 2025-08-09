@@ -2,7 +2,6 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import requests
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from torch.nn.functional import softmax
 import google.generativeai as genai
 import os
@@ -45,23 +44,34 @@ def rotate_gemini_key():
 configure_gemini()
 
 # ===== Other API Keys =====
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "fb219e70e5msh16e46246e5d06ebp1b198bjsnd1485b3213b4")
 
-# ===== Load Models (once) =====
-print("Loading models... This may take a minute.")
-goemotions_tokenizer = AutoTokenizer.from_pretrained("monologg/bert-base-cased-goemotions-original")
-goemotions_model = AutoModelForSequenceClassification.from_pretrained("monologg/bert-base-cased-goemotions-original")
+# ===== Lazy Model Loading =====
+goemotions_tokenizer = None
+goemotions_model = None
+sentiment_tokenizer = None
+sentiment_model = None
+emotions = None
 
-sentiment_tokenizer = AutoTokenizer.from_pretrained("finiteautomata/bertweet-base-sentiment-analysis")
-sentiment_model = AutoModelForSequenceClassification.from_pretrained("finiteautomata/bertweet-base-sentiment-analysis")
+def load_models():
+    """Load models only when needed."""
+    global goemotions_tokenizer, goemotions_model, sentiment_tokenizer, sentiment_model, emotions
+    if goemotions_tokenizer is None:
+        print("📥 Loading models for the first time...")
+        from transformers import AutoTokenizer, AutoModelForSequenceClassification
+        goemotions_tokenizer = AutoTokenizer.from_pretrained("monologg/bert-base-cased-goemotions-original")
+        goemotions_model = AutoModelForSequenceClassification.from_pretrained("monologg/bert-base-cased-goemotions-original")
+        sentiment_tokenizer = AutoTokenizer.from_pretrained("finiteautomata/bertweet-base-sentiment-analysis")
+        sentiment_model = AutoModelForSequenceClassification.from_pretrained("finiteautomata/bertweet-base-sentiment-analysis")
 
-emotions_url = "https://raw.githubusercontent.com/google-research/google-research/master/goemotions/data/emotions.txt"
-emotions = requests.get(emotions_url).text.strip().split('\n')
-
-print("✅ Models loaded successfully.")
+        # Load emotions list
+        emotions_url = "https://raw.githubusercontent.com/google-research/google-research/master/goemotions/data/emotions.txt"
+        emotions = requests.get(emotions_url).text.strip().split('\n')
+        print("✅ Models loaded successfully.")
 
 # ===== Helper functions =====
 def detect_emotion(text):
+    load_models()
     inputs = goemotions_tokenizer(text, return_tensors="pt", truncation=True, padding=True)
     outputs = goemotions_model(**inputs)
     probs = softmax(outputs.logits, dim=1)
@@ -69,6 +79,7 @@ def detect_emotion(text):
     return [(emotions[i], float(top_probs[0][idx].detach())) for idx, i in enumerate(top_ids[0])]
 
 def detect_mental_state(text):
+    load_models()
     inputs = sentiment_tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=128)
     outputs = sentiment_model(**inputs)
     probs = softmax(outputs.logits, dim=1)
@@ -115,6 +126,10 @@ class StoryRequest(BaseModel):
     mood: str
 
 # ===== Endpoints =====
+@app.get("/healthz")
+def health_check():
+    return {"status": "ok"}
+
 @app.post("/analyze_mood")
 def analyze_mood(req: MoodRequest):
     if not req.text.strip():
@@ -137,9 +152,3 @@ def get_ai_story(req: StoryRequest):
 @app.get("/get_daily_wisdom")
 def daily_wisdom():
     return get_daily_wisdom()
-
-# ===== Run when executed directly =====
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)

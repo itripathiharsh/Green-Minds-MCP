@@ -7,6 +7,7 @@ from torch.nn.functional import softmax
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 
 app = FastAPI(title="Green Minds MCP Server")
@@ -44,7 +45,7 @@ def rotate_gemini_key():
 configure_gemini()
 
 # ===== Other API Keys =====
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY","fb219e70e5msh16e46246e5d06ebp1b198bjsnd1485b3213b4")
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
 
 # ===== Load Models (once) =====
 print("Loading models... This may take a minute.")
@@ -136,3 +137,9 @@ def get_ai_story(req: StoryRequest):
 @app.get("/get_daily_wisdom")
 def daily_wisdom():
     return get_daily_wisdom()
+
+# ===== Run when executed directly =====
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)

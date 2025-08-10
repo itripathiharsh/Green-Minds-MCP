@@ -20,20 +20,17 @@ load_dotenv()
 app = FastAPI(
     title="Green Minds MCP Server",
     description="AI-powered mood & mental wellness API for the Puch AI x OpenAI Hackathon.",
-    version="2.0.0" # Final Version
+    version="2.2.0" # Final Fix Version
 )
 
 # =========================
 # API Keys Configuration
 # =========================
-# --- Gemini ---
-GEMINI_API_KEYS = [key for key in [os.getenv("GEMINI_API_KEY_1"), os.getenv("GEMINI_API_KEY_2"), os.getenv("GEMINI_API_KEY_3")] if key]
+GEMINI_API_KEYS = [key for key in [os.getenv("GEMINI_API_KEY_1"), os.getenv("GEMINI_API_KEY_2")] if key]
 if not GEMINI_API_KEYS: raise RuntimeError("No Gemini API keys found.")
-current_key_index = 0
 genai.configure(api_key=GEMINI_API_KEYS[0])
 print(f"✅ Using Gemini API key #1")
 
-# --- RapidAPI ---
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
 
 # =========================
@@ -51,10 +48,12 @@ def load_models():
     print("📥 Loading models on startup...")
     goemotions_model_name = "mrm8488/distilroberta-finetuned-go_emotions"
     sentiment_model_name = "distilbert-base-uncased-finetuned-sst-2-english"
+
     goemotions_tokenizer = AutoTokenizer.from_pretrained(goemotions_model_name)
     goemotions_model = AutoModelForSequenceClassification.from_pretrained(goemotions_model_name)
     sentiment_tokenizer = AutoTokenizer.from_pretrained(sentiment_model_name)
     sentiment_model = AutoModelForSequenceClassification.from_pretrained(sentiment_model_name)
+
     emotions_url = "https://raw.githubusercontent.com/google-research/google-research/master/goemotions/data/emotions.txt"
     emotions = requests.get(emotions_url).text.strip().split('\n')
     print("✅ Models loaded successfully.")
@@ -68,16 +67,17 @@ class MoodRequest(BaseModel):
 class StoryRequest(BaseModel):
     mood: str
 
-# Schema for the bearer token required by the /validate endpoint
 class BearerToken(BaseModel):
     bearer_token: str
 
 # =========================
 # API Endpoints
 # =========================
+# THIS IS THE FIX: The root endpoint now accepts both GET and POST requests.
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+@app.post("/", response_class=HTMLResponse, include_in_schema=False)
 def home():
-    """A simple HTML landing page for the API root."""
+    """A simple HTML landing page that handles GET and POST for verification."""
     return """
     <html>
         <head><title>Green Minds MCP</title>
@@ -97,20 +97,18 @@ def home():
     </html>
     """
 
-# --- MCP Compliance Endpoint ---
 @app.post("/validate", tags=["MCP Compliance"])
 async def validate_server(token: BearerToken):
-    """
-    Mandatory endpoint for the Puch MCP platform to verify server ownership.
-    It receives a bearer token and must return the owner's phone number.
-    """
-    # Replace this with your actual phone number in the required format.
-    YOUR_PHONE_NUMBER = "919876543210" # <-- IMPORTANT: REPLACE THIS
-    
+    """Mandatory endpoint for the Puch MCP platform to verify server ownership."""
+    YOUR_PHONE_NUMBER = "919876543210" # <-- IMPORTANT: REPLACE WITH YOURS
     print(f"Received validation request with token: {token.bearer_token}")
     return {"phone_number": YOUR_PHONE_NUMBER}
 
-# --- Core AI Tools ---
+@app.get("/healthz", tags=["Utilities"])
+def health_check():
+    """A simple health check endpoint to confirm the server is running."""
+    return {"status": "ok"}
+
 @app.post("/analyze_mood", tags=["Core AI Tools"])
 def analyze_mood(req: MoodRequest):
     """Analyzes text to determine emotions and mental state."""

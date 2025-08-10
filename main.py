@@ -6,35 +6,31 @@ from torch.nn.functional import softmax
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
+from fastapi.responses import HTMLResponse
 
 load_dotenv()
 
 app = FastAPI(title="Green Minds MCP Server")
 
 # ===== CONFIG =====
-# Multiple Gemini API Keys for fallback
 GEMINI_API_KEYS = [
     os.getenv("GEMINI_API_KEY_1"),
     os.getenv("GEMINI_API_KEY_2"),
     os.getenv("GEMINI_API_KEY_3"),
 ]
-
-# Remove None or empty keys
 GEMINI_API_KEYS = [key for key in GEMINI_API_KEYS if key]
 
 if not GEMINI_API_KEYS:
-    raise RuntimeError("No Gemini API keys found. Please set GEMINI_API_KEY_1, GEMINI_API_KEY_2, etc.")
+    raise RuntimeError("No Gemini API keys found.")
 
 current_key_index = 0
 
 def configure_gemini():
-    """Configure Gemini with the current key."""
     global current_key_index
     genai.configure(api_key=GEMINI_API_KEYS[current_key_index])
     print(f"✅ Using Gemini API key #{current_key_index+1}")
 
 def rotate_gemini_key():
-    """Switch to the next Gemini API key if available."""
     global current_key_index
     current_key_index += 1
     if current_key_index >= len(GEMINI_API_KEYS):
@@ -54,7 +50,6 @@ sentiment_model = None
 emotions = None
 
 def load_models():
-    """Load models only when needed."""
     global goemotions_tokenizer, goemotions_model, sentiment_tokenizer, sentiment_model, emotions
     if goemotions_tokenizer is None:
         print("📥 Loading models for the first time...")
@@ -63,13 +58,10 @@ def load_models():
         goemotions_model = AutoModelForSequenceClassification.from_pretrained("monologg/bert-base-cased-goemotions-original")
         sentiment_tokenizer = AutoTokenizer.from_pretrained("finiteautomata/bertweet-base-sentiment-analysis")
         sentiment_model = AutoModelForSequenceClassification.from_pretrained("finiteautomata/bertweet-base-sentiment-analysis")
-
-        # Load emotions list
         emotions_url = "https://raw.githubusercontent.com/google-research/google-research/master/goemotions/data/emotions.txt"
         emotions = requests.get(emotions_url).text.strip().split('\n')
         print("✅ Models loaded successfully.")
 
-# ===== Helper functions =====
 def detect_emotion(text):
     load_models()
     inputs = goemotions_tokenizer(text, return_tensors="pt", truncation=True, padding=True)
@@ -103,7 +95,6 @@ def get_daily_wisdom():
         return {"error": "Could not fetch shlok"}
 
 def generate_ai_story(mood):
-    """Generate a story with Gemini key fallback."""
     for attempt in range(len(GEMINI_API_KEYS)):
         try:
             model = genai.GenerativeModel("gemini-1.5-flash")
@@ -118,14 +109,41 @@ def generate_ai_story(mood):
                 return f"Error: {str(re)}"
     return f"Error: All Gemini API keys failed for mood '{mood}'."
 
-# ===== Request Schemas =====
+# ===== Schemas =====
 class MoodRequest(BaseModel):
     text: str
 
 class StoryRequest(BaseModel):
     mood: str
 
-# ===== Endpoints =====
+# ===== Root Endpoint for Web Browsers =====
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return """
+    <html>
+        <head>
+            <title>Green Minds MCP API</title>
+        </head>
+        <body style="font-family: Arial; margin: 20px;">
+            <h1>🌱 Green Minds MCP API</h1>
+            <p>Welcome! This API provides mood analysis, AI-generated stories, and daily wisdom.</p>
+            <h2>Available Endpoints</h2>
+            <ul>
+                <li><b>GET</b> <code>/healthz</code> → Health check</li>
+                <li><b>POST</b> <code>/analyze_mood</code> → Analyze mood (JSON: {"text": "your text"})</li>
+                <li><b>POST</b> <code>/get_ai_story</code> → Get AI-generated story (JSON: {"mood": "happy"})</li>
+                <li><b>GET</b> <code>/get_daily_wisdom</code> → Get Bhagavad Gita wisdom</li>
+            </ul>
+            <h3>Example Usage</h3>
+            <pre>
+curl -X POST https://green-minds-mcp.onrender.com/analyze_mood \\
+-H "Content-Type: application/json" \\
+-d '{"text": "I feel great today"}'
+            </pre>
+        </body>
+    </html>
+    """
+
 @app.get("/healthz")
 def health_check():
     return {"status": "ok"}

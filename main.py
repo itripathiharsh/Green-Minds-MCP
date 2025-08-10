@@ -6,7 +6,6 @@ from torch.nn.functional import softmax
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
-from fastapi.responses import HTMLResponse
 
 load_dotenv()
 
@@ -19,7 +18,6 @@ GEMINI_API_KEYS = [
     os.getenv("GEMINI_API_KEY_3"),
 ]
 GEMINI_API_KEYS = [key for key in GEMINI_API_KEYS if key]
-
 if not GEMINI_API_KEYS:
     raise RuntimeError("No Gemini API keys found.")
 
@@ -62,6 +60,7 @@ def load_models():
         emotions = requests.get(emotions_url).text.strip().split('\n')
         print("✅ Models loaded successfully.")
 
+# ===== Helper functions =====
 def detect_emotion(text):
     load_models()
     inputs = goemotions_tokenizer(text, return_tensors="pt", truncation=True, padding=True)
@@ -89,10 +88,7 @@ def get_daily_wisdom():
         "X-RapidAPI-Host": "bhagavad-gita3.p.rapidapi.com"
     }
     r = requests.get(url, headers=headers)
-    if r.status_code == 200:
-        return r.json()
-    else:
-        return {"error": "Could not fetch shlok"}
+    return r.json() if r.status_code == 200 else {"error": "Could not fetch shlok"}
 
 def generate_ai_story(mood):
     for attempt in range(len(GEMINI_API_KEYS)):
@@ -109,62 +105,50 @@ def generate_ai_story(mood):
                 return f"Error: {str(re)}"
     return f"Error: All Gemini API keys failed for mood '{mood}'."
 
-# ===== Schemas =====
+# ===== Request Schemas =====
 class MoodRequest(BaseModel):
     text: str
 
 class StoryRequest(BaseModel):
     mood: str
 
-# ===== Root Endpoint for Web Browsers =====
-@app.get("/", response_class=HTMLResponse)
-def home():
-    return """
-    <html>
-        <head>
-            <title>Green Minds MCP API</title>
-        </head>
-        <body style="font-family: Arial; margin: 20px;">
-            <h1>🌱 Green Minds MCP API</h1>
-            <p>Welcome! This API provides mood analysis, AI-generated stories, and daily wisdom.</p>
-            <h2>Available Endpoints</h2>
-            <ul>
-                <li><b>GET</b> <code>/healthz</code> → Health check</li>
-                <li><b>POST</b> <code>/analyze_mood</code> → Analyze mood (JSON: {"text": "your text"})</li>
-                <li><b>POST</b> <code>/get_ai_story</code> → Get AI-generated story (JSON: {"mood": "happy"})</li>
-                <li><b>GET</b> <code>/get_daily_wisdom</code> → Get Bhagavad Gita wisdom</li>
-            </ul>
-            <h3>Example Usage</h3>
-            <pre>
-curl -X POST https://green-minds-mcp.onrender.com/analyze_mood \\
--H "Content-Type: application/json" \\
--d '{"text": "I feel great today"}'
-            </pre>
-        </body>
-    </html>
-    """
-
+# ===== Endpoints =====
 @app.get("/healthz")
 def health_check():
     return {"status": "ok"}
 
+# POST version
 @app.post("/analyze_mood")
-def analyze_mood(req: MoodRequest):
+def analyze_mood_post(req: MoodRequest):
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Text input cannot be empty.")
     emotions_list = detect_emotion(req.text)
     mental_state, confidence = detect_mental_state(req.text)
-    return {
-        "emotions": emotions_list,
-        "mental_state": mental_state,
-        "confidence": confidence
-    }
+    return {"emotions": emotions_list, "mental_state": mental_state, "confidence": confidence}
 
+# GET version
+@app.get("/analyze_mood")
+def analyze_mood_get(text: str):
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Text input cannot be empty.")
+    emotions_list = detect_emotion(text)
+    mental_state, confidence = detect_mental_state(text)
+    return {"emotions": emotions_list, "mental_state": mental_state, "confidence": confidence}
+
+# POST version
 @app.post("/get_ai_story")
-def get_ai_story(req: StoryRequest):
+def get_ai_story_post(req: StoryRequest):
     if not req.mood.strip():
         raise HTTPException(status_code=400, detail="Mood cannot be empty.")
     story = generate_ai_story(req.mood)
+    return {"story": story}
+
+# GET version
+@app.get("/get_ai_story")
+def get_ai_story_get(mood: str):
+    if not mood.strip():
+        raise HTTPException(status_code=400, detail="Mood cannot be empty.")
+    story = generate_ai_story(mood)
     return {"story": story}
 
 @app.get("/get_daily_wisdom")

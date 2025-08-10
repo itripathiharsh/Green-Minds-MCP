@@ -7,6 +7,8 @@ It detects emotions, identifies mental states, shares uplifting AI-generated sto
 
 ---
 
+## Try API AT https://the-arthur-morgan-green-minds-mcp.hf.space/
+
 ## 🚀 Features
 
 * **Mood & Emotion Analysis**
@@ -154,23 +156,6 @@ By providing AI-powered emotional insights & instant uplifting content, it can s
 
 ---
 
-## 🏆 How to Submit for Puch AI Hackathon
-
-1. Push this code to your GitHub repository.
-2. Run your MCP server locally and note the server URL.
-3. Use the Puch AI Discord bot command:
-
-   ```
-   /hackathon submission add <server_id> [github_url]
-   ```
-4. Example:
-
-   ```
-   /hackathon submission add greenminds https://github.com/itripathiharsh/Green-Minds-MCP
-   ```
-5. Share your project in the hackathon channel.
-
----
 
 ## 👨‍💻 Author
 

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 import requests
 import torch
@@ -120,17 +120,14 @@ def health_check():
 # POST version
 @app.post("/analyze_mood")
 def analyze_mood_post(req: MoodRequest):
-    if not req.text.strip():
-        raise HTTPException(status_code=400, detail="Text input cannot be empty.")
-    emotions_list = detect_emotion(req.text)
-    mental_state, confidence = detect_mental_state(req.text)
+    text = req.text.strip()
+    emotions_list = detect_emotion(text)
+    mental_state, confidence = detect_mental_state(text)
     return {"emotions": emotions_list, "mental_state": mental_state, "confidence": confidence}
 
-# GET version
+# GET version with default sample
 @app.get("/analyze_mood")
-def analyze_mood_get(text: str):
-    if not text.strip():
-        raise HTTPException(status_code=400, detail="Text input cannot be empty.")
+def analyze_mood_get(text: str = Query("I am feeling happy and relaxed today", description="Your mood text")):
     emotions_list = detect_emotion(text)
     mental_state, confidence = detect_mental_state(text)
     return {"emotions": emotions_list, "mental_state": mental_state, "confidence": confidence}
@@ -138,16 +135,13 @@ def analyze_mood_get(text: str):
 # POST version
 @app.post("/get_ai_story")
 def get_ai_story_post(req: StoryRequest):
-    if not req.mood.strip():
-        raise HTTPException(status_code=400, detail="Mood cannot be empty.")
-    story = generate_ai_story(req.mood)
+    mood = req.mood.strip()
+    story = generate_ai_story(mood)
     return {"story": story}
 
-# GET version
+# GET version with default sample
 @app.get("/get_ai_story")
-def get_ai_story_get(mood: str):
-    if not mood.strip():
-        raise HTTPException(status_code=400, detail="Mood cannot be empty.")
+def get_ai_story_get(mood: str = Query("happy", description="Mood to base the story on")):
     story = generate_ai_story(mood)
     return {"story": story}
 
